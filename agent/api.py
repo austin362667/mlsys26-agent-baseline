@@ -9,12 +9,32 @@ import openai
 logger = logging.getLogger(__name__)
 
 
+def _require_env(var_names: list[str], api_type: str) -> str:
+    """Return the first configured env var value or raise a clear error."""
+    for var_name in var_names:
+        value = os.environ.get(var_name)
+        if value:
+            return value
+
+    raise RuntimeError(
+        f"Missing credentials for api_type='{api_type}'. Set one of: "
+        + ", ".join(var_names)
+    )
+
+
 def create_inference_server(api_type: str):
     """Create an LLM client based on API type."""
     if api_type == "openai":
-        return openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+        return openai.OpenAI(
+            api_key=_require_env(["OPENAI_API_KEY"], api_type),
+            base_url=os.environ.get("OPENAI_BASE_URL"),
+        )
     elif api_type in ("claude", "anthropic"):
-        return anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        auth_token = os.environ.get("ANTHROPIC_AUTH_TOKEN")
+        if not api_key and not auth_token:
+            _require_env(["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"], api_type)
+        return anthropic.Anthropic(api_key=api_key, auth_token=auth_token)
     else:
         raise ValueError(f"Unsupported api_type: {api_type}")
 

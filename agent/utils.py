@@ -12,9 +12,15 @@ REPO_TOP_PATH = os.path.abspath(
     )
 )
 
-DATASET_ROOTS = {
-    "flashinfer-trace": os.path.join(REPO_TOP_PATH, "datasets", "flashinfer-trace"),
-    "mlsys26-contest": os.path.join(REPO_TOP_PATH, "datasets", "mlsys26-contest"),
+DATASET_ROOT_CANDIDATES = {
+    "flashinfer-trace": [
+        os.path.join(REPO_TOP_PATH, "datasets", "flashinfer-trace"),
+        os.path.join(REPO_TOP_PATH, "flashinfer-trace"),
+    ],
+    "mlsys26-contest": [
+        os.path.join(REPO_TOP_PATH, "datasets", "mlsys26-contest"),
+        os.path.join(REPO_TOP_PATH, "mlsys26-contest"),
+    ],
 }
 
 
@@ -117,9 +123,19 @@ def extract_edits(output: str):
 
 def get_dataset_root(test_source: str) -> str:
     """Return dataset root path for the given test source."""
-    if test_source not in DATASET_ROOTS:
-        raise ValueError(f"Unknown test_source: {test_source}, expected one of {list(DATASET_ROOTS)}")
-    return DATASET_ROOTS[test_source]
+    if test_source not in DATASET_ROOT_CANDIDATES:
+        raise ValueError(
+            f"Unknown test_source: {test_source}, expected one of {list(DATASET_ROOT_CANDIDATES)}"
+        )
+
+    for candidate in DATASET_ROOT_CANDIDATES[test_source]:
+        if os.path.isdir(candidate):
+            return candidate
+
+    raise FileNotFoundError(
+        f"Dataset root for '{test_source}' not found. Checked: "
+        + ", ".join(DATASET_ROOT_CANDIDATES[test_source])
+    )
 
 
 def construct_flashinfer_trace_dataset(
@@ -127,7 +143,7 @@ def construct_flashinfer_trace_dataset(
 ) -> list[str]:
     """Return sorted list of problem names for given op_type."""
     if dataset_root is None:
-        dataset_root = DATASET_ROOTS["flashinfer-trace"]
+        dataset_root = get_dataset_root("flashinfer-trace")
     op_dir = os.path.join(dataset_root, "definitions", op_type)
     return sorted(f[:-5] for f in os.listdir(op_dir) if f.endswith(".json"))
 
@@ -139,7 +155,7 @@ def load_flashinfer_trace_definition(
 ) -> dict:
     """Load definition JSON for given op_type and problem_name."""
     if dataset_root is None:
-        dataset_root = DATASET_ROOTS["flashinfer-trace"]
+        dataset_root = get_dataset_root("flashinfer-trace")
     path = os.path.join(dataset_root, "definitions", op_type, f"{problem_name}.json")
     with open(path, "r") as f:
         return json.load(f)
