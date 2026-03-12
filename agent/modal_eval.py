@@ -159,6 +159,11 @@ def ensure_dataset_synced(
     dataset_vol: modal.Volume, local_dataset_root: str, dataset_name: str
 ):
     """Ensure local dataset is uploaded to Modal Volume via batch_upload."""
+    if not os.path.isdir(local_dataset_root):
+        raise FileNotFoundError(
+            f"Local dataset root does not exist or is not a directory: {local_dataset_root}"
+        )
+
     try:
         if dataset_vol.listdir(f"/{dataset_name}"):
             logger.info(

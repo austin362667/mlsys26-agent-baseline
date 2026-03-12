@@ -4,14 +4,98 @@ import argparse
 import json
 import logging
 import os
+import shutil
 
 import numpy as np
 from tqdm import tqdm
 
+from agent.eval import EvalResult, calculate_score
 from agent.iterative_agent import propose_step, run_iterative_loop
-from agent.eval import calculate_score
 
 logger = logging.getLogger(__name__)
+
+
+def load_evolve_from_logs(log_path: str):
+    """Load completed evolve proposals from an existing log directory."""
+    empty = ([], [], [], [], [], [], 0)
+
+    if not os.path.exists(log_path):
+        logger.warning(f"Resume path {log_path} does not exist")
+        return empty
+
+    step_files: list[tuple[int, str]] = []
+    for filename in os.listdir(log_path):
+        if not (filename.startswith("proposal_") and filename.endswith(".py")):
+            continue
+        suffix = filename[len("proposal_") : -3]
+        if not suffix.isdigit():
+            continue
+        step_files.append((int(suffix), filename))
+
+    if not step_files:
+        logger.warning(f"No evolve proposal files found in {log_path}")
+        return empty
+
+    step_files.sort(key=lambda x: x[0])
+    kernel_pool: list[str] = []
+    metrics_pool: list[EvalResult] = []
+    proposal_ids: list[int] = []
+    max_step = 0
+
+    for step_idx, kernel_file in step_files:
+        kernel_path = os.path.join(log_path, kernel_file)
+        metrics_path = os.path.join(log_path, f"proposal_{step_idx}_metrics.json")
+        if not os.path.exists(metrics_path):
+            logger.warning(
+                f"Metrics file {metrics_path} not found, skipping step {step_idx}"
+            )
+            continue
+
+        with open(kernel_path, "r") as f:
+            kernel = f.read()
+        with open(metrics_path, "r") as f:
+            metrics = EvalResult(**json.load(f))
+
+        kernel_pool.append(kernel)
+        metrics_pool.append(metrics)
+        proposal_ids.append(step_idx)
+        max_step = max(max_step, step_idx)
+
+    if not proposal_ids:
+        logger.warning(f"No complete evolve steps found in {log_path}")
+        return empty
+
+    sorted_data = sorted(
+        zip(kernel_pool, metrics_pool, proposal_ids),
+        key=lambda x: calculate_score(x[1]),
+        reverse=True,
+    )
+    elite_pool, elite_metrics_pool, elite_proposal_ids = zip(*sorted_data)
+    logger.info(
+        f"Resumed evolve state from {log_path}: loaded {len(proposal_ids)} proposals, "
+        f"max_step={max_step}, best_score={calculate_score(elite_metrics_pool[0])}"
+    )
+    return (
+        kernel_pool,
+        metrics_pool,
+        proposal_ids,
+        list(elite_pool),
+        list(elite_metrics_pool),
+        list(elite_proposal_ids),
+        max_step,
+    )
+
+
+def copy_evolve_step_files(src_path: str, dst_path: str, max_step: int = 0):
+    """Copy evolve proposal logs into a new output directory when resuming elsewhere."""
+    os.makedirs(dst_path, exist_ok=True)
+
+    for step_idx in range(1, max_step + 1):
+        for suffix in (".py", ".txt", "_metrics.json", "_log.json"):
+            src_file = os.path.join(src_path, f"proposal_{step_idx}{suffix}")
+            if os.path.exists(src_file):
+                dst_file = os.path.join(dst_path, f"proposal_{step_idx}{suffix}")
+                shutil.copy2(src_file, dst_file)
 
 
 def run_evolve_loop(
@@ -21,12 +105,32 @@ def run_evolve_loop(
     log_path: str = None,
 ):
     """Run the evolve loop: propose kernels, maintain elite pool, optionally refine."""
-    kernel_pool = []
-    metrics_pool = []
-    proposal_ids = []
-    elite_pool = []
-    elite_metrics_pool = []
-    elite_proposal_ids = []
+    start_step = 0
+    kernel_pool: list[str] = []
+    metrics_pool: list[EvalResult] = []
+    proposal_ids: list[int] = []
+    elite_pool: list[str] = []
+    elite_metrics_pool: list[EvalResult] = []
+    elite_proposal_ids: list[int] = []
+
+    if args.agent_type == "evolve" and args.resume_from is not None:
+        (
+            kernel_pool,
+            metrics_pool,
+            proposal_ids,
+            elite_pool,
+            elite_metrics_pool,
+            elite_proposal_ids,
+            start_step,
+        ) = load_evolve_from_logs(args.resume_from)
+        if start_step > 0 and log_path and log_path != args.resume_from:
+            copy_evolve_step_files(args.resume_from, log_path, start_step)
+        if start_step >= args.proposal_steps and elite_pool:
+            logger.info(
+                f"Resume already reached target total_steps={args.proposal_steps}, "
+                "returning cached best kernel"
+            )
+            return elite_pool[0], elite_metrics_pool[0]
 
     def _last_k_idx(n: int, k: int) -> list[int]:
         if k <= 0 or n <= 0:
@@ -34,8 +138,10 @@ def run_evolve_loop(
         return list(range(max(0, n - k), n))
 
     for i in tqdm(
-        range(args.proposal_steps),
+        range(start_step, args.proposal_steps),
         desc=f"Evolve Agent on {args.level}_{args.problem_id}",
+        initial=start_step,
+        total=args.proposal_steps,
     ):
         logger.debug(f"Running proposal {i+1} of {args.proposal_steps}")
 
