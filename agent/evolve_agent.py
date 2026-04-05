@@ -241,6 +241,9 @@ def run_evolve_loop(
                     proposal_metrics.correct if proposal_metrics else False
                 ),
                 "speedup": proposal_metrics.speedup if proposal_metrics else 0.0,
+                "speedup_per_workload": (
+                    proposal_metrics.speedup_per_workload if proposal_metrics else []
+                ),
                 "score": calculate_score(proposal_metrics),
             }
             with open(os.path.join(log_path, f"proposal_{i+1}_log.json"), "w") as f:
