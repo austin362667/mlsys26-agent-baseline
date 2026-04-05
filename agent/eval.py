@@ -4,6 +4,7 @@ Kernel evaluation using flashinfer-bench Python API directly.
 
 import json
 import logging
+import math
 import uuid
 
 from flashinfer_bench.bench import Benchmark, BenchmarkConfig
@@ -26,11 +27,18 @@ class EvalResult(BaseModel):
     compiled: bool = False
     correct: bool = False
     speedup: float = 0.0
+    speedup_per_workload: list[tuple[str, float]] = []  # (workload_id, speedup) per seq_len config
     latency_ms: float | None = None
     task_id: str = ""
     error: str | None = None
     stats: dict | None = None
 
+def _geometric_mean(values: list[float]) -> float:
+    """Geometric mean over a non-empty list of positive speedup values."""
+    if not values:
+        return 0.0
+    log_sum = sum(math.log(max(v, 1e-9)) for v in values)
+    return math.exp(log_sum / len(values))
 
 def calculate_score(metric: EvalResult):
     """Return (compiled, correct, speedup) tuple for ranking."""
@@ -40,6 +48,11 @@ def calculate_score(metric: EvalResult):
         return (0, 0, 0)
     if not metric.correct:
         return (1, 0, 0)
+    if metric.speedup_per_workload:
+        speedup = _geometric_mean([s for _, s in metric.speedup_per_workload])
+    else:
+        # fall back to scalar for old logs
+        speedup = metric.speedup
     return (1, 1, metric.speedup)
 
 
@@ -194,10 +207,16 @@ def eval_kernel(
 
     n = len(latencies)
     avg_speedup = sum(speedups) / n
+    # per-workload vector + geometric mean scalar
+    workload_ids = [t.id for t in traces if t.evaluation and t.evaluation.status == EvaluationStatus.PASSED]
+    speedup_per_workload = list(zip(workload_ids, speedups))
+    geo_mean_speedup = _geometric_mean(speedups)
+
     return EvalResult(
         compiled=True,
         correct=True,
-        speedup=avg_speedup,
+        speedup=geo_mean_speedup,
+        speedup_per_workload=speedup_per_workload,
         latency_ms=sum(latencies) / n,
         task_id=task_id,
         stats={
