@@ -153,3 +153,106 @@ def generate_pool_prompt(
 
     merged = "\n\n".join(parts)
     return POOL_PROMPT.format(pool_kernels_and_metrics=merged)
+
+CROSSOVER_PROMPT = """## Crossover Task
+
+You are an expert GPU kernel engineer performing **genetic crossover** between two parent kernels.
+Your goal is to produce ONE offspring kernel that outperforms the base parent across all workloads.
+
+---
+
+### Base kernel (better parent — use as your foundation)
+
+Performance:
+{better_status}
+```python
+{better_kernel}
+```
+
+---
+
+### Secondary kernel (worse parent — study its errors and insights)
+
+Performance:
+{worse_status}
+```python
+{worse_kernel}
+```
+
+---
+
+### Instructions
+
+Think step-by-step before writing any code:
+
+1. **Understand the base kernel**: What makes it correct and fast? Which workloads is it weakest on?
+2. **Diagnose the secondary kernel**:
+   - If it has compile errors: identify exactly why and make sure your offspring avoids them.
+   - If it has correctness errors: understand the numerical issue and do not replicate it.
+   - If it is faster on any workload: extract that specific optimisation (tiling strategy, memory access pattern, vectorisation, fusion) and safely port it to the base.
+   - If it is slower everywhere: look for structural ideas that could be adapted — different loop ordering, different use of shared memory, different parallelism strategy.
+3. **Mutate deliberately**: Choose ONE or TWO concrete changes beyond what either parent does. Examples:
+   - Adjust tile sizes or block dimensions based on per-workload bottlenecks
+   - Fuse or split loops differently
+   - Change the shared memory layout or vectorisation width
+   - Improve the memory access pattern for a specific workload shape
+4. Output ONLY the final kernel code. No explanation, no markdown fences, no comments outside the code.
+
+Generate the implementation:
+"""
+
+
+def _format_metrics_for_crossover(metrics: "EvalResult | None", label: str) -> str:
+    """Render an EvalResult as a human-readable status block for the crossover prompt."""
+    if metrics is None:
+        return f"[{label}] Status: unknown / not evaluated."
+    if not metrics.compiled:
+        return (
+            f"[{label}] Status: COMPILE ERROR\n"
+            f"Error log: {metrics.error or 'unknown'}"
+        )
+    if not metrics.correct:
+        return (
+            f"[{label}] Status: INCORRECT OUTPUT\n"
+            f"Error log: {metrics.error or 'unknown'}"
+        )
+    per_workload = "\n".join(
+        f"  {wid}: {s:.4f}x"
+        for wid, s in (metrics.speedup_per_workload or [])
+    )
+    lines = [
+        f"[{label}] Status: CORRECT",
+        f"Geometric mean speedup: {metrics.speedup:.4f}x",
+    ]
+    if per_workload:
+        lines.append(f"Per-workload speedups:\n{per_workload}")
+    if metrics.latency_ms is not None:
+        lines.append(f"Average latency: {metrics.latency_ms:.3f} ms")
+    return "\n".join(lines)
+
+
+def generate_crossover_prompt(
+    ref_arch_src: str,
+    better_kernel: str,
+    better_metrics: "EvalResult | None",
+    worse_kernel: str,
+    worse_metrics: "EvalResult | None",
+    task_params: dict,
+) -> str:
+    """Build the full crossover prompt: task definition + two parents."""
+    # Reuse TRITON_PROMPT for the task definition header so the model
+    # always sees the problem spec regardless of prompt type.
+    required_keys = set(re.findall(r"\{(\w+)\}", TRITON_PROMPT))
+    for key in required_keys:
+        if key not in task_params:
+            raise ValueError(f"Missing required parameter for crossover prompt: {key}")
+
+    task_header = PROBLEM_STATEMENT + TRITON_PROMPT.format(**task_params)
+
+    crossover_body = CROSSOVER_PROMPT.format(
+        better_status=_format_metrics_for_crossover(better_metrics, "Base kernel"),
+        better_kernel=better_kernel,
+        worse_status=_format_metrics_for_crossover(worse_metrics, "Secondary kernel"),
+        worse_kernel=worse_kernel,
+    )
+    return task_header + crossover_body
