@@ -16,10 +16,12 @@ DATASET_ROOT_CANDIDATES = {
     "flashinfer-trace": [
         os.path.join(REPO_TOP_PATH, "datasets", "flashinfer-trace"),
         os.path.join(REPO_TOP_PATH, "flashinfer-trace"),
+        os.path.join(REPO_TOP_PATH, "../flashinfer-contest-playground/mlsys26-contest")
     ],
     "mlsys26-contest": [
         os.path.join(REPO_TOP_PATH, "datasets", "mlsys26-contest"),
         os.path.join(REPO_TOP_PATH, "mlsys26-contest"),
+        os.path.join(REPO_TOP_PATH, "../flashinfer-contest-playground/mlsys26-contest")
     ],
 }
 
