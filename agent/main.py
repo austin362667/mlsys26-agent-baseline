@@ -10,6 +10,8 @@ import traceback
 import yaml
 from tqdm import tqdm
 
+from agent.ga_agent import run_ga_loop
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
@@ -63,6 +65,12 @@ def run_agent(args: argparse.Namespace, inference_server, level, problem_id):
         args.proposal_steps = args.total_steps
         args.refine_steps = 0
         best_kernel, best_metrics = run_evolve_loop(
+            ref_arch_src, inference_server, args, log_path=result_save_path
+        )
+    elif args.agent_type == "ga":
+        args.population_size = args.population_size
+        args.num_generations = args.num_generations
+        best_kernel, best_metrics = run_ga_loop(
             ref_arch_src, inference_server, args, log_path=result_save_path
         )
     else:
@@ -213,6 +221,9 @@ if __name__ == "__main__":
 
     # Config file
     parser.add_argument("--config", type=str, default=None)
+
+    parser.add_argument("--population_size",  type=int, default=20)
+    parser.add_argument("--num_generations",  type=int, default=10)
 
     args = parser.parse_args()
     args = load_config_from_yaml(args, parser)
