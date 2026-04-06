@@ -137,11 +137,22 @@ def create_modal_app(gpu_type: str = "B200"):
         if not latencies:
             return {"task_id": task_id, "error": "No evaluation results"}
 
+        workload_ids = [t.id for t in traces if t.evaluation and t.evaluation.status == EvaluationStatus.PASSED]
+        speedup_per_workload = list(zip(workload_ids, speedups))
+
+        import math
+        def _geo(vals):
+            if not vals: return 0.0
+            return math.exp(sum(math.log(max(v, 1e-9)) for v in vals) / len(vals))
+
+        geo_mean = _geo(speedups)
+
         n = len(latencies)
         return {
             "compiled": True,
             "correct": True,
-            "speedup": sum(speedups) / n,
+            "speedup": geo_mean,
+            "speedup_per_workload": speedup_per_workload,   # list[tuple[str, float]]
             "latency_ms": sum(latencies) / n,
             "task_id": task_id,
             "stats": {
