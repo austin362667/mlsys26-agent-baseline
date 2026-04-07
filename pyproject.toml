@@ -1,0 +1,19 @@
+[project]
+name = "mlsys26-agent-baseline"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+
+dependencies = [
+    "anthropic",
+    "openai",
+    "numpy",
+    "pydantic",
+    "pyyaml",
+    "tqdm",
+    "flashinfer-bench",
+    "torch",
+    "triton",
+    "modal",
+]
