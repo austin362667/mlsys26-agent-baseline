@@ -11,16 +11,19 @@ agent/
   main.py              # Entry point & task orchestration
   iterative_agent.py   # Iterative Agent: propose + refine loop
   evolve_agent.py      # Evolve Agent: elite pool evolution loop
+  ga_agent.py          # Genetic Algorithm Agent: select best and recombine parts of parent kernels and evolve children kernels loop
   api.py               # LLM API client (OpenAI / Claude)
   eval.py              # Kernel evaluation via flashinfer-bench API
   modal_eval.py        # Remote kernel evaluation on Modal GPU
   utils.py             # Shared utilities & data helpers
 prompt/
-  proposer_prompt.py   # Kernel proposal prompt
   tuner_prompt.py      # Kernel tuning prompt (str_replace edits)
+  proposer_prompt.py   # Kernel proposal prompt
+  ga_prompt.py          # GA cross-over prompt
 config/
   config_iterative.yaml   # Iterative agent config
   config_evolve.yaml      # Evolve agent config
+  config_ga.yaml          # GA agent confgi
   config_mini_test.yaml   # Quick smoke test config
   tasks_default.txt    # Default task list
   tasks_mini.txt       # Minimal task list for smoke test

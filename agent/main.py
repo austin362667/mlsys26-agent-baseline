@@ -17,6 +17,9 @@ from agent.api import create_inference_server  # noqa: E402
 from agent.eval import create_eval_fn, read_metrics  # noqa: E402
 from agent.evolve_agent import run_evolve_loop  # noqa: E402
 from agent.iterative_agent import run_iterative_loop  # noqa: E402
+from agent.ga_agent import run_ga_loop  # noqa: E402
+from agent.gepa_agent import run_gepa_loop  # noqa: E402
+from agent.cutegen_agent import run_cutegen_loop  # noqa: E402
 from agent.utils import load_config_from_yaml  # noqa: E402
 from agent.utils import (
     REPO_TOP_PATH,
@@ -63,6 +66,24 @@ def run_agent(args: argparse.Namespace, inference_server, level, problem_id):
         args.proposal_steps = args.total_steps
         args.refine_steps = 0
         best_kernel, best_metrics = run_evolve_loop(
+            ref_arch_src, inference_server, args, log_path=result_save_path
+        )
+    elif args.agent_type == "ga":
+        args.population_size = args.population_size
+        args.num_generations = args.num_generations
+        best_kernel, best_metrics = run_ga_loop(
+            ref_arch_src, inference_server, args, log_path=result_save_path
+        )
+    elif args.agent_type == "gepa": # https://arxiv.org/pdf/2507.19457
+        args.population_size = args.population_size
+        args.num_generations = args.num_generations
+        best_kernel, best_metrics = run_gepa_loop(
+            ref_arch_src, inference_server, args, log_path=result_save_path
+        )
+    elif args.agent_type == "cutegen": # https://arxiv.org/pdf/2604.01489
+        args.population_size = args.population_size
+        args.num_generations = args.num_generations
+        best_kernel, best_metrics = run_cutegen_loop(
             ref_arch_src, inference_server, args, log_path=result_save_path
         )
     else:
@@ -213,6 +234,10 @@ if __name__ == "__main__":
 
     # Config file
     parser.add_argument("--config", type=str, default=None)
+
+    # GA-specific configs
+    parser.add_argument("--population_size",  type=int, default=20)
+    parser.add_argument("--num_generations",  type=int, default=10)
 
     args = parser.parse_args()
     args = load_config_from_yaml(args, parser)
