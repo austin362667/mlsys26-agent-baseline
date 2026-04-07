@@ -31,7 +31,7 @@ def create_modal_app(gpu_type: str = "B200"):
 
     image = modal.Image.from_registry(
         "nvidia/cuda:13.1.1-cudnn-devel-ubuntu24.04", add_python="3.12"
-    ).pip_install("flashinfer-bench", "torch", "triton", "pydantic")
+    ).pip_install("flashinfer-bench", "torch", "triton", "nvidia-cutlass-dsl", "pydantic")
 
     dataset_vol = modal.Volume.from_name(VOLUME_NAME, create_if_missing=True)
 
