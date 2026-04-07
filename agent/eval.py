@@ -53,7 +53,7 @@ def calculate_score(metric: EvalResult):
     else:
         # fall back to scalar for old logs
         speedup = metric.speedup
-    return (1, 1, metric.speedup)
+    return (1, 1, speedup)
 
 
 def read_metrics(metrics_path: str, full: bool = False):
